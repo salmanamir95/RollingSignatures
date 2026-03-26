@@ -4,43 +4,70 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
+#include <stdlib.h>
 #include "datatype/OpStatus.h"
 #include "datatype/uint256_t.h"
 #include "datatype/uint512.h"
 #include "util/SignUtils.h"
+#include "certifiicate/certificate.h"
 
-// Use a macro for signature size if not defined elsewhere
 #ifndef UINT512_SIZE
 #define UINT512_SIZE 64
 #endif
 
-// We define PACKET_INLINE similar to CERT_INLINE for high performance
 #define PACKET_INLINE static inline __attribute__((always_inline))
 
 /*
  * Concept: Packet = Payload || Signature
- * The packet consists of a variable-length data payload followed immediately
- * by a 64-byte Ed25519 signature over that payload.
+ * The signature is generated over (Payload || Certificate) using Ed25519.
  */
 
 /**
- * @brief Signs a payload using Ed25519 and outputs the signature.
+ * @brief Signs a payload and certificate using Ed25519 and outputs the signature.
  */
-PACKET_INLINE OpStatus_t packet_sign(const uint8_t *payload, size_t payload_len, const uint256 *priv_key, uint512 *out_sig)
+PACKET_INLINE OpStatus_t packet_sign(const uint8_t *payload, size_t payload_len, const certificate *cert, const uint256 *priv_key, uint512 *out_sig)
 {
-    if (!payload || !priv_key || !out_sig) return OP_NULL_PTR;
+    if (!payload || !cert || !priv_key || !out_sig) return OP_NULL_PTR;
     
-    return sign_buffer_ed25519(payload, payload_len, priv_key, out_sig);
+    // Allocate contiguous buffer for payload || certificate
+    size_t combined_len = payload_len + CERT_SIZE;
+    uint8_t *combined = (uint8_t *)malloc(combined_len);
+    if (!combined) return OP_INVALID_STATE; // memory error
+
+    memcpy(combined, payload, payload_len);
+    OpStatus_t st = cert_serialize(cert, combined + payload_len, CERT_SIZE);
+    if (st != OP_SUCCESS) {
+        free(combined);
+        return st;
+    }
+
+    st = sign_buffer_ed25519(combined, combined_len, priv_key, out_sig);
+    free(combined);
+    return st;
 }
 
 /**
- * @brief Verifies a payload against an Ed25519 signature and public key.
+ * @brief Verifies a payload + certificate against an Ed25519 signature and public key.
  */
-PACKET_INLINE OpStatus_t packet_verify(const uint8_t *payload, size_t payload_len, const uint512 *sig, const uint256 *pub_key)
+PACKET_INLINE OpStatus_t packet_verify(const uint8_t *payload, size_t payload_len, const certificate *cert, const uint512 *sig, const uint256 *pub_key)
 {
-    if (!payload || !sig || !pub_key) return OP_NULL_PTR;
+    if (!payload || !cert || !sig || !pub_key) return OP_NULL_PTR;
     
-    return verify_buffer_ed25519_status(payload, payload_len, pub_key, sig);
+    // Allocate contiguous buffer for payload || certificate
+    size_t combined_len = payload_len + CERT_SIZE;
+    uint8_t *combined = (uint8_t *)malloc(combined_len);
+    if (!combined) return OP_INVALID_STATE;
+
+    memcpy(combined, payload, payload_len);
+    OpStatus_t st = cert_serialize(cert, combined + payload_len, CERT_SIZE);
+    if (st != OP_SUCCESS) {
+        free(combined);
+        return OP_SIGN_VERIFIED_FALSE;
+    }
+
+    st = verify_buffer_ed25519_status(combined, combined_len, pub_key, sig);
+    free(combined);
+    return st;
 }
 
 /**
@@ -50,14 +77,9 @@ PACKET_INLINE OpStatus_t packet_serialize(const uint8_t *payload, size_t payload
 {
     if (!payload || !sig || !out_buffer) return OP_NULL_PTR;
     
-    // Ensure the output buffer is large enough for the payload + 64-byte signature
     if (out_size < (payload_len + UINT512_SIZE)) return OP_BUF_TOO_SMALL;
 
-    // 1. Copy payload bytes
     memcpy(out_buffer, payload, payload_len);
-    
-    // 2. Append Signature
-    // Following uint256_serialize_be pattern, assuming uint512_serialize_be exists
     return uint512_serialize_be(sig, out_buffer + payload_len, UINT512_SIZE);
 }
 
@@ -68,13 +90,9 @@ PACKET_INLINE OpStatus_t packet_deserialize(const uint8_t *in_buffer, size_t in_
 {
     if (!in_buffer || !out_payload || !out_sig) return OP_NULL_PTR;
     
-    // The input bounds must be at least the expected payload length + 64 bytes
     if (in_size < (payload_len + UINT512_SIZE)) return OP_BUF_TOO_SMALL;
     
-    // 1. Extract payload bytes
     memcpy(out_payload, in_buffer, payload_len);
-    
-    // 2. Extract signature
     return uint512_deserialize_be(in_buffer + payload_len, UINT512_SIZE, out_sig);
 }
 
