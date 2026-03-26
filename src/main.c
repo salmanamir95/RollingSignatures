@@ -1,8 +1,7 @@
 #include <stdio.h>
-#include "rolling.h"
+#include "hmac_routing.h"
 
 int main() {
-    printf("Rolling Signatures Project Initialized.\n");
-    init_rolling_signatures();
+    printf("HMAC Multihop Routing Protocol initializing...\n");
     return 0;
 }
