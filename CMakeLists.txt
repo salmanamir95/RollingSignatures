@@ -6,6 +6,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 # Include directories
 include_directories(inc)
+find_package(OpenSSL REQUIRED)
 
 # Collect main executable sources
 file(GLOB SOURCES "src/*.c")
@@ -20,5 +21,11 @@ enable_testing()
 add_executable(test_rolling tests/test_main.c src/rolling.c)
 target_include_directories(test_rolling PRIVATE inc)
 
+# Add packet test
+add_executable(test_packet tests/test_packet.c)
+target_include_directories(test_packet PRIVATE inc)
+target_link_libraries(test_packet PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+
 # Register with CTest
 add_test(NAME test_rolling COMMAND test_rolling)
+add_test(NAME test_packet COMMAND test_packet)
