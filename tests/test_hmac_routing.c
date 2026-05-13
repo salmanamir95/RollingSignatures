@@ -30,19 +30,19 @@ int main() {
     memcpy(current_key, K0, ROUTING_KEY_SIZE);
     
     for (size_t i = 0; i < num_hops; i++) {
-        uint8_t node_id = path_nodes[i];
+        ipv6_t node_id; ipv6_init(&node_id, (uint8_t[16]){path_nodes[i]});
         uint8_t next_key[ROUTING_KEY_SIZE];
         
-        printf("\n--- HOP %zu (Node %d) ---\n", i + 1, node_id);
+        printf("\n--- HOP %zu (Node %d) ---\n", i + 1, path_nodes[i]);
         
         // Node processes the packet
-        bool ok = forward_packet(&packet, node_id, current_key, next_key);
+        bool ok = forward_packet(&packet, &node_id, current_key, next_key);
         if (!ok) {
-            printf("CRITICAL: Verification FAILED at Hop %zu (Node %d)!\n", i + 1, node_id);
+            printf("CRITICAL: Verification FAILED at Hop %zu (Node %d)!\n", i + 1, path_nodes[i]);
             return 1;
         }
         
-        printf("Incoming HMAC verified! Appending Node %d, deriving new key...\n", node_id);
+        printf("Incoming HMAC verified! Appending Node %d, deriving new key...\n", path_nodes[i]);
         memcpy(current_key, next_key, ROUTING_KEY_SIZE); // Hand over derived key for simulation
         
         print_hex("New In-Place HMAC", packet.hmac, ROUTING_HMAC_SIZE);

@@ -24,10 +24,10 @@ typedef struct {
 /**
  * @brief Derives a per-hop key: K_i = H(K_{i-1} || NodeID_i)
  */
-static inline void derive_key(const uint8_t *k_prev, uint8_t node_id, uint8_t *k_out) {
-    uint8_t buf[ROUTING_KEY_SIZE + 1];
+static inline void derive_key(const uint8_t *k_prev, const ipv6_t *node_id, uint8_t *k_out) {
+    uint8_t buf[ROUTING_KEY_SIZE + sizeof(ipv6_t)];
     memcpy(buf, k_prev, ROUTING_KEY_SIZE);
-    buf[ROUTING_KEY_SIZE] = node_id;
+    memcpy(buf + ROUTING_KEY_SIZE, node_id->address, sizeof(ipv6_t));
     
     unsigned int len = 0;
     EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
@@ -69,7 +69,7 @@ static inline void create_packet(RoutingPacket *pkt, const uint8_t *payload, siz
  * @brief 2. Per-hop HMAC update and verification
  * Modifies the packet in-place by appending NodeID and overwriting HMAC.
  */
-static inline bool forward_packet(RoutingPacket *pkt, uint8_t node_id_i, const uint8_t *k_prev, uint8_t *k_out_derived) {
+static inline bool forward_packet(RoutingPacket *pkt, const ipv6_t *node_id_i, const uint8_t *k_prev, uint8_t *k_out_derived) {
     // A. Verify previous HMAC
     uint8_t expected_hmac[ROUTING_HMAC_SIZE];
     compute_hmac(k_prev, pkt, expected_hmac);
@@ -81,7 +81,7 @@ static inline bool forward_packet(RoutingPacket *pkt, uint8_t node_id_i, const u
     if (pkt->path_len >= MAX_PATH_HOPS) {
         return false; // Route too long
     }
-    pkt->path_vector[pkt->path_len++] = node_id_i;
+    pkt->path_vector[pkt->path_len++] = *node_id_i;
 
     // C. Derive new key: Ki = H(K_{i-1} || NodeID_i)
     derive_key(k_prev, node_id_i, k_out_derived);
