@@ -1,27 +1,25 @@
-cmake_minimum_required(VERSION 3.14)
-project(HMACRouting C)
+cmake_minimum_required(VERSION 3.20)
 
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_C_STANDARD_REQUIRED ON)
+project(RollingSignatures LANGUAGES C CXX)
 
+# -------------------------------------------------
+# Header-only library (NO compilation)
+# -------------------------------------------------
+add_library(RollingSignatures INTERFACE)
+
+# -------------------------------------------------
 # Include directories
-include_directories(inc)
-find_package(OpenSSL REQUIRED)
+# -------------------------------------------------
+target_include_directories(RollingSignatures INTERFACE
+    ${CMAKE_CURRENT_SOURCE_DIR}/inc
+)
 
-# Collect main executable sources
-file(GLOB SOURCES "src/*.c")
+# -------------------------------------------------
+# Dependency: shared (crypto + core utilities)
+# -------------------------------------------------
+target_link_libraries(RollingSignatures INTERFACE shared)
 
-# Create the main executable
-add_executable(${PROJECT_NAME} ${SOURCES})
-target_link_libraries(${PROJECT_NAME} PRIVATE OpenSSL::SSL OpenSSL::Crypto)
-
-# Enable testing
-enable_testing()
-
-# Add HMAC routing test
-add_executable(test_hmac_routing tests/test_hmac_routing.c)
-target_include_directories(test_hmac_routing PRIVATE inc)
-target_link_libraries(test_hmac_routing PRIVATE OpenSSL::SSL OpenSSL::Crypto)
-
-# Register with CTest
-add_test(NAME test_hmac_routing COMMAND test_hmac_routing)
+# -------------------------------------------------
+# Language standard
+# -------------------------------------------------
+target_compile_features(RollingSignatures INTERFACE cxx_std_23)

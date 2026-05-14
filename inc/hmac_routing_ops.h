@@ -9,18 +9,7 @@
 #include <openssl/hmac.h>
 
 #define ROUTING_KEY_SIZE 32
-#define ROUTING_HMAC_SIZE 32
-#define MAX_PATH_HOPS 16
-
-typedef struct {
-    uint8_t payload[256];
-    size_t payload_len;
-    uint8_t path_vector[MAX_PATH_HOPS]; // Array of NodeIDs representing the route
-    size_t path_len;
-    uint8_t hmac[ROUTING_HMAC_SIZE];
-    uint32_t nonce;
-} RoutingPacket;
-
+#include "protocol/routing/RoutingPacket.h"
 /**
  * @brief Derives a per-hop key: K_i = H(K_{i-1} || NodeID_i)
  */
@@ -45,7 +34,7 @@ static inline void compute_hmac(const uint8_t *key, const RoutingPacket *pkt, ui
     HMAC_CTX *ctx = HMAC_CTX_new();
     HMAC_Init_ex(ctx, key, ROUTING_KEY_SIZE, EVP_sha256(), NULL);
     HMAC_Update(ctx, pkt->payload, pkt->payload_len);
-    HMAC_Update(ctx, pkt->path_vector, pkt->path_len);
+    HMAC_Update(ctx, (const uint8_t*)pkt->path_vector, pkt->path_len * sizeof(ipv6_t));
     HMAC_Update(ctx, (const uint8_t*)&pkt->nonce, sizeof(pkt->nonce));
     HMAC_Final(ctx, hmac_out, &len);
     HMAC_CTX_free(ctx);
@@ -102,7 +91,7 @@ static inline bool verify_packet(const RoutingPacket *pkt, const uint8_t *k0) {
     // Iteratively compute K_i = H(K_{i-1} || NodeID_i) across the entire path
     for (size_t i = 0; i < pkt->path_len; i++) {
         uint8_t next_key[ROUTING_KEY_SIZE];
-        derive_key(current_key, pkt->path_vector[i], next_key);
+        derive_key(current_key, &pkt->path_vector[i], next_key);
         memcpy(current_key, next_key, ROUTING_KEY_SIZE);
     }
 
